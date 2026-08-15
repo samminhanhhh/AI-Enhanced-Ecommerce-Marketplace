@@ -1,20 +1,20 @@
-// Import thư viện Express vừa cài
 const express = require('express');
+const cors = require('cors');
 const db = require('./db');
+const userRoutes = require('./routes/userRoutes');
 
-// Tạo một "ứng dụng" Express - đây sẽ là server của mình
 const app = express();
-
-// Chọn cổng (port) để server lắng nghe - giống như "địa chỉ nhà"
 const PORT = 5000;
 
-// Tạo một "route" (đường dẫn) đơn giản để kiểm tra server có chạy không
-// Khi ai đó truy cập vào "/", server sẽ trả về dòng chữ này
+app.use(cors());
+app.use(express.json());
+
 app.get('/', (req, res) => {
-  res.send('Server backend đang chạy');
+  res.send('Server backend đang chạy ngon lành!');
 });
 
-// Khởi động server, lắng nghe ở cổng đã chọn
+app.use('/api/users', userRoutes);
+
 app.listen(PORT, () => {
   console.log(`Server đang chạy tại http://localhost:${PORT}`);
 });
