@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
 const db = require('../db');
+const { verifyToken } = require('../middleware/authMiddleware');
 
 // API ĐĂNG KÝ - POST /api/users/register
 router.post('/register', async (req, res) => {
@@ -77,6 +78,11 @@ router.post('/login', (req, res) => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role }
     });
   });
+});
+
+// API lấy thông tin cá nhân - CẦN đăng nhập mới gọi được
+router.get('/profile', verifyToken, (req, res) => {
+  res.json({ message: 'Đây là thông tin của bạn', user: req.user });
 });
 
 module.exports = router;
