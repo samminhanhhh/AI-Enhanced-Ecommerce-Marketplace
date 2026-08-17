@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { verifyToken } = require('../middleware/authMiddleware');
+const { verifyToken, checkRole } = require('../middleware/authMiddleware');
 
 // POST - Đặt hàng (checkout) - dùng TRANSACTION
 router.post('/', verifyToken, (req, res) => {
@@ -124,6 +124,21 @@ router.get('/:id', verifyToken, (req, res) => {
       if (err) return res.status(500).json({ message: 'Lỗi server' });
       res.json({ ...orders[0], items });
     });
+  });
+});
+
+// PUT - Cập nhật trạng thái đơn hàng (CHỈ seller/admin)
+router.put('/:id/status', verifyToken, checkRole(['seller', 'admin']), (req, res) => {
+  const { shipping_status } = req.body;
+  const validStatuses = ['pending', 'confirmed', 'shipping', 'delivered', 'cancelled'];
+
+  if (!validStatuses.includes(shipping_status)) {
+    return res.status(400).json({ message: 'Trạng thái không hợp lệ' });
+  }
+
+  db.query('UPDATE orders SET shipping_status = ? WHERE id = ?', [shipping_status, req.params.id], (err) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    res.json({ message: 'Đã cập nhật trạng thái đơn hàng' });
   });
 });
 

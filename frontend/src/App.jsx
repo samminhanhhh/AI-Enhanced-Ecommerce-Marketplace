@@ -6,6 +6,7 @@ import Products from './pages/Products';
 import AddProduct from './pages/AddProduct';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
+import Orders from './pages/Orders';
 
 function Home() {
   return <h2 style={{ textAlign: 'center', marginTop: 50 }}>Trang chủ (đang xây dựng)</h2>;
@@ -23,6 +24,7 @@ function App() {
         <Route path="/add-product" element={<AddProduct />} />
         <Route path="/cart" element={<Cart />} />
         <Route path="/checkout" element={<Checkout />} />
+        <Route path="/orders" element={<Orders />} />
       </Routes>
     </BrowserRouter>
   );
