@@ -24,35 +24,6 @@ router.post('/', verifyToken, checkRole(['seller']), (req, res) => {
   });
 });
 
-// GET - Xem danh sách sản phẩm (AI CŨNG XEM ĐƯỢC)
-// Hỗ trợ lọc theo category và tìm theo tên qua query string
-router.get('/', (req, res) => {
-  const { category_id, search } = req.query;
-
-  let sql = `SELECT p.*, c.name AS category_name, u.name AS seller_name
-             FROM products p
-             JOIN categories c ON p.category_id = c.id
-             JOIN users u ON p.seller_id = u.id
-             WHERE p.status = 'active'`;
-  const params = [];
-
-  if (category_id) {
-    sql += ' AND p.category_id = ?';
-    params.push(category_id);
-  }
-  if (search) {
-    sql += ' AND p.name LIKE ?';
-    params.push(`%${search}%`);
-  }
-
-  db.query(sql, params, (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ message: 'Lỗi server' });
-    }
-    res.json(results);
-  });
-});
 
 // GET - Xem chi tiết 1 sản phẩm theo id
 router.get('/:id', (req, res) => {
@@ -128,22 +99,50 @@ router.post('/:id/images', verifyToken, checkRole(['seller']), upload.single('im
       return res.status(403).json({ message: 'Bạn không có quyền thêm ảnh cho sản phẩm này' });
     }
 
-    const imageUrl = `/uploads/${req.file.filename}`;
-    db.query(
-      'INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, ?)',
-      [productId, imageUrl, false],
-      (err, result) => {
-        if (err) return res.status(500).json({ message: 'Lỗi server' });
-        res.status(201).json({ message: 'Upload ảnh thành công', imageUrl });
-      }
-    );
+    // Kiểm tra sản phẩm này đã có ảnh nào chưa - nếu chưa, ảnh này sẽ là ảnh chính
+    db.query('SELECT COUNT(*) AS total FROM product_images WHERE product_id = ?', [productId], (err, countResult) => {
+      if (err) return res.status(500).json({ message: 'Lỗi server' });
+      const isFirstImage = countResult[0].total === 0;
+
+      const imageUrl = `/uploads/${req.file.filename}`;
+      db.query(
+        'INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, ?)',
+        [productId, imageUrl, isFirstImage],
+        (err, result) => {
+          if (err) return res.status(500).json({ message: 'Lỗi server' });
+          res.status(201).json({ message: 'Upload ảnh thành công', imageUrl });
+        }
+      );
+    });
   });
 });
 
-// GET - Lấy tất cả ảnh của 1 sản phẩm
-router.get('/:id/images', (req, res) => {
-  db.query('SELECT * FROM product_images WHERE product_id = ?', [req.params.id], (err, results) => {
-    if (err) return res.status(500).json({ message: 'Lỗi server' });
+// GET - Xem danh sách sản phẩm (có kèm ảnh đại diện)
+router.get('/', (req, res) => {
+  const { category_id, search } = req.query;
+
+  let sql = `SELECT p.*, c.name AS category_name, u.name AS seller_name,
+             (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image
+             FROM products p
+             JOIN categories c ON p.category_id = c.id
+             JOIN users u ON p.seller_id = u.id
+             WHERE p.status = 'active'`;
+  const params = [];
+
+  if (category_id) {
+    sql += ' AND p.category_id = ?';
+    params.push(category_id);
+  }
+  if (search) {
+    sql += ' AND p.name LIKE ?';
+    params.push(`%${search}%`);
+  }
+
+  db.query(sql, params, (err, results) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Lỗi server' });
+    }
     res.json(results);
   });
 });

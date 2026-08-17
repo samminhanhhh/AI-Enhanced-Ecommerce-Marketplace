@@ -1,8 +1,16 @@
 import axios from 'axios';
 
-// Tạo 1 "bản sao" axios đã cấu hình sẵn địa chỉ gốc của backend
 const api = axios.create({
   baseURL: 'http://localhost:5000/api',
+});
+
+// Interceptor: chạy TRƯỚC MỖI request, tự động gắn token nếu có
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 export default api;
