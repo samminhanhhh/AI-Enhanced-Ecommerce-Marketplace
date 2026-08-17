@@ -10,6 +10,7 @@ const PORT = 5000;
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 app.use('/api/products', productRoutes);
 
 app.get('/', (req, res) => {

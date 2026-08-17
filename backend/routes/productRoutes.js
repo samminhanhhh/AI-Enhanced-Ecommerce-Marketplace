@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { verifyToken, checkRole } = require('../middleware/authMiddleware');
+const upload = require('../middleware/upload');
 
 // POST - Đăng sản phẩm mới (CHỈ seller)
 router.post('/', verifyToken, checkRole(['seller']), (req, res) => {
@@ -109,6 +110,41 @@ router.delete('/:id', verifyToken, checkRole(['seller']), (req, res) => {
       if (err) return res.status(500).json({ message: 'Lỗi server' });
       res.json({ message: 'Xóa sản phẩm thành công' });
     });
+  });
+});
+
+// POST - Upload ảnh cho 1 sản phẩm (CHỈ seller sở hữu)
+router.post('/:id/images', verifyToken, checkRole(['seller']), upload.single('image'), (req, res) => {
+  const productId = req.params.id;
+
+  if (!req.file) {
+    return res.status(400).json({ message: 'Vui lòng chọn file ảnh' });
+  }
+
+  db.query('SELECT seller_id FROM products WHERE id = ?', [productId], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
+    if (results[0].seller_id !== req.user.id) {
+      return res.status(403).json({ message: 'Bạn không có quyền thêm ảnh cho sản phẩm này' });
+    }
+
+    const imageUrl = `/uploads/${req.file.filename}`;
+    db.query(
+      'INSERT INTO product_images (product_id, image_url, is_primary) VALUES (?, ?, ?)',
+      [productId, imageUrl, false],
+      (err, result) => {
+        if (err) return res.status(500).json({ message: 'Lỗi server' });
+        res.status(201).json({ message: 'Upload ảnh thành công', imageUrl });
+      }
+    );
+  });
+});
+
+// GET - Lấy tất cả ảnh của 1 sản phẩm
+router.get('/:id/images', (req, res) => {
+  db.query('SELECT * FROM product_images WHERE product_id = ?', [req.params.id], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    res.json(results);
   });
 });
 
