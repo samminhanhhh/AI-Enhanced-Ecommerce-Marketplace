@@ -5,8 +5,8 @@ function Products() {
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const user = JSON.parse(localStorage.getItem('user') || 'null');
 
-  // Hàm gọi API lấy danh sách sản phẩm
   const fetchProducts = async (searchTerm = '') => {
     setLoading(true);
     try {
@@ -20,7 +20,6 @@ function Products() {
     setLoading(false);
   };
 
-  // useEffect: chạy 1 lần khi trang vừa load xong
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -28,6 +27,19 @@ function Products() {
   const handleSearch = (e) => {
     e.preventDefault();
     fetchProducts(search);
+  };
+
+  const handleAddToCart = async (productId) => {
+    if (!user) {
+      alert('Vui lòng đăng nhập để thêm vào giỏ hàng');
+      return;
+    }
+    try {
+      await api.post('/cart/items', { product_id: productId, quantity: 1 });
+      alert('Đã thêm vào giỏ hàng!');
+    } catch (err) {
+      alert(err.response?.data?.message || 'Có lỗi xảy ra');
+    }
   };
 
   return (
@@ -51,23 +63,27 @@ function Products() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
         {products.map((p) => (
           <div key={p.id} style={{ border: '1px solid #444', borderRadius: 8, padding: 12 }}>
-  {p.primary_image ? (
-    <img
-      src={`http://localhost:5000${p.primary_image}`}
-      alt={p.name}
-      style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 4 }}
-    />
-  ) : (
-    <div style={{ width: '100%', height: 160, background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4 }}>
-      <span style={{ color: '#888', fontSize: 13 }}>Chưa có ảnh</span>
-    </div>
-  )}
-  <h4>{p.name}</h4>
-  <p style={{ fontSize: 14, color: '#aaa' }}>{p.category_name}</p>
-  <p style={{ fontWeight: 'bold' }}>{Number(p.price).toLocaleString('vi-VN')}đ</p>
-  <p style={{ fontSize: 13 }}>Còn lại: {p.stock}</p>
-  <p style={{ fontSize: 13 }}>Người bán: {p.seller_name}</p>
-</div>
+            {p.primary_image ? (
+              <img
+                src={`http://localhost:5000${p.primary_image}`}
+                alt={p.name}
+                style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 4 }}
+              />
+            ) : (
+              <div style={{ width: '100%', height: 160, background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4 }}>
+                <span style={{ color: '#888', fontSize: 13 }}>Chưa có ảnh</span>
+              </div>
+            )}
+            <h4>{p.name}</h4>
+            <p style={{ fontSize: 14, color: '#aaa' }}>{p.category_name}</p>
+            <p style={{ fontWeight: 'bold' }}>{Number(p.price).toLocaleString('vi-VN')}đ</p>
+            <p style={{ fontSize: 13 }}>Còn lại: {p.stock}</p>
+            {(!user || user.role === 'buyer') && (
+              <button onClick={() => handleAddToCart(p.id)} style={{ width: '100%', padding: 8, marginTop: 8 }}>
+                Thêm vào giỏ
+              </button>
+            )}
+          </div>
         ))}
       </div>
     </div>
