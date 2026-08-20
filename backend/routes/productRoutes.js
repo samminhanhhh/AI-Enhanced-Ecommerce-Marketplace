@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { verifyToken, checkRole } = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
-const { generateEmbedding } = require('../services/embeddingService');
+const { generateEmbedding, cosineSimilarity } = require('../services/embeddingService');
 
 // POST - Đăng sản phẩm mới (CHỈ seller)
 router.post('/', verifyToken, checkRole(['seller']), (req, res) => {
@@ -203,6 +203,58 @@ router.post('/', verifyToken, checkRole(['seller']), async (req, res) => {
       res.status(201).json({ message: 'Đăng sản phẩm thành công (embedding sẽ được tạo sau)', productId: newProductId });
     }
   });
+});
+
+// GET - Tìm kiếm ngữ nghĩa (Semantic Search) - USP của đồ án
+router.get('/search/semantic', async (req, res) => {
+  const { q } = req.query; // q = query, câu người dùng tìm kiếm
+
+  if (!q || q.trim() === '') {
+    return res.status(400).json({ message: 'Vui lòng nhập từ khóa tìm kiếm' });
+  }
+
+  try {
+    // Bước 1: biến câu tìm kiếm thành vector
+    const queryVector = await generateEmbedding(q);
+
+    // Bước 2: lấy tất cả sản phẩm active kèm embedding của chúng
+    const sql = `SELECT p.id, p.name, p.description, p.price, p.stock, p.category_id,
+                c.name AS category_name, u.name AS seller_name,
+                (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image,
+                pe.vector
+                FROM products p
+                JOIN categories c ON p.category_id = c.id
+                JOIN users u ON p.seller_id = u.id
+                JOIN product_embeddings pe ON pe.product_id = p.id
+                WHERE p.status = 'active'`;
+
+    db.query(sql, (err, products) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ message: 'Lỗi server' });
+      }
+
+      // Bước 3: tính độ giống nhau cho từng sản phẩm, gắn thêm điểm số
+      const resultsWithScore = products.map((p) => {
+        const productVector = typeof p.vector === 'string' ? JSON.parse(p.vector) : p.vector;
+        const score = cosineSimilarity(queryVector, productVector);
+        // Bỏ trường vector thô khỏi kết quả trả về (không cần gửi cho frontend, dữ liệu nặng)
+        const { vector, ...productData } = p;
+        return { ...productData, similarity: score };
+      });
+
+      // Bước 4: sắp xếp theo độ giống nhau giảm dần, lấy top kết quả liên quan nhất
+      resultsWithScore.sort((a, b) => b.similarity - a.similarity);
+
+      // Bước 5: chỉ giữ những kết quả có độ liên quan tối thiểu (tránh trả về rác hoàn toàn không liên quan)
+      const relevantResults = resultsWithScore.filter((p) => p.similarity > 0.3);
+
+      res.json(relevantResults);
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Lỗi khi tìm kiếm' });
+  }
 });
 
 module.exports = router;
