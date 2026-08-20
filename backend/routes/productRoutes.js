@@ -14,7 +14,7 @@ router.post('/', verifyToken, checkRole(['seller']), (req, res) => {
   }
 
   const sql = `INSERT INTO products (seller_id, category_id, name, description, price, stock, status)
-               VALUES (?, ?, ?, ?, ?, ?, 'active')`;
+               VALUES (?, ?, ?, ?, ?, ?, 'pending')`;
   db.query(sql, [seller_id, category_id, name, description || null, price, stock || 0], (err, result) => {
     if (err) {
       console.error(err);
