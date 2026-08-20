@@ -16,7 +16,8 @@ function Navbar() {
       <Link to="/products">Sản phẩm</Link>
       {user?.role === 'seller' && <Link to="/add-product">Đăng bán</Link>}
       {user?.role === 'buyer' && <Link to="/cart">Giỏ hàng</Link>}
-      {user?.role === 'buyer' && <Link to="/orders">Đơn hàng của tôi</Link>}    
+      {user?.role === 'buyer' && <Link to="/orders">Đơn hàng của tôi</Link>}
+      {user?.role === 'admin' && <Link to="/admin">Quản trị</Link>}    
 
       <div style={{ marginLeft: 'auto' }}>
         {user ? (
