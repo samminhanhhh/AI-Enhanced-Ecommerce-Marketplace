@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { verifyToken, checkRole } = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
+const { generateEmbedding } = require('../services/embeddingService');
 
 // POST - Đăng sản phẩm mới (CHỈ seller)
 router.post('/', verifyToken, checkRole(['seller']), (req, res) => {
@@ -49,7 +50,6 @@ router.put('/:id', verifyToken, checkRole(['seller']), (req, res) => {
   const { name, description, price, stock } = req.body;
   const productId = req.params.id;
 
-  // Bước 1: kiểm tra sản phẩm này có đúng của seller đang đăng nhập không
   db.query('SELECT seller_id FROM products WHERE id = ?', [productId], (err, results) => {
     if (err) return res.status(500).json({ message: 'Lỗi server' });
     if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
@@ -57,11 +57,27 @@ router.put('/:id', verifyToken, checkRole(['seller']), (req, res) => {
       return res.status(403).json({ message: 'Bạn không có quyền sửa sản phẩm này' });
     }
 
-    // Bước 2: nếu đúng chủ, cho phép sửa
     const sql = 'UPDATE products SET name=?, description=?, price=?, stock=? WHERE id=?';
-    db.query(sql, [name, description, price, stock, productId], (err) => {
+    db.query(sql, [name, description, price, stock, productId], async (err) => {
       if (err) return res.status(500).json({ message: 'Lỗi server' });
-      res.json({ message: 'Cập nhật sản phẩm thành công' });
+
+      // Cập nhật lại embedding vì tên/mô tả có thể đã đổi
+      try {
+        const textToEmbed = `${name}. ${description || ''}`;
+        const vector = await generateEmbedding(textToEmbed);
+        const vectorJson = JSON.stringify(vector);
+        db.query(
+          `INSERT INTO product_embeddings (product_id, vector) VALUES (?, ?) ON DUPLICATE KEY UPDATE vector = ?`,
+          [productId, vectorJson, vectorJson],
+          (embErr) => {
+            if (embErr) console.error('Lỗi cập nhật embedding:', embErr);
+            res.json({ message: 'Cập nhật sản phẩm thành công' });
+          }
+        );
+      } catch (embError) {
+        console.error(embError);
+        res.json({ message: 'Cập nhật sản phẩm thành công (embedding chưa cập nhật)' });
+      }
     });
   });
 });
@@ -144,6 +160,48 @@ router.get('/', (req, res) => {
       return res.status(500).json({ message: 'Lỗi server' });
     }
     res.json(results);
+  });
+});
+
+// POST - Đăng sản phẩm mới (CHỈ seller) - TỰ ĐỘNG sinh embedding luôn
+router.post('/', verifyToken, checkRole(['seller']), async (req, res) => {
+  const { name, description, price, stock, category_id } = req.body;
+  const seller_id = req.user.id;
+
+  if (!name || !price || !category_id) {
+    return res.status(400).json({ message: 'Vui lòng nhập đủ tên, giá, danh mục' });
+  }
+
+  const sql = `INSERT INTO products (seller_id, category_id, name, description, price, stock, status)
+               VALUES (?, ?, ?, ?, ?, ?, 'pending')`;
+
+  db.query(sql, [seller_id, category_id, name, description || null, price, stock || 0], async (err, result) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ message: 'Lỗi server' });
+    }
+
+    const newProductId = result.insertId;
+
+    // Tự động sinh embedding ngay sau khi tạo sản phẩm thành công
+    try {
+      const textToEmbed = `${name}. ${description || ''}`;
+      const vector = await generateEmbedding(textToEmbed);
+      const vectorJson = JSON.stringify(vector);
+      db.query(
+        `INSERT INTO product_embeddings (product_id, vector) VALUES (?, ?)`,
+        [newProductId, vectorJson],
+        (embErr) => {
+          if (embErr) console.error('Lỗi sinh embedding tự động:', embErr);
+          // Dù embedding lỗi, vẫn trả về thành công cho việc đăng sản phẩm (không chặn seller)
+          res.status(201).json({ message: 'Đăng sản phẩm thành công', productId: newProductId });
+        }
+      );
+    } catch (embError) {
+      console.error('Lỗi sinh embedding:', embError);
+      // Sản phẩm vẫn tạo được dù embedding lỗi - không nên chặn cả luồng chỉ vì 1 bước phụ
+      res.status(201).json({ message: 'Đăng sản phẩm thành công (embedding sẽ được tạo sau)', productId: newProductId });
+    }
   });
 });
 
