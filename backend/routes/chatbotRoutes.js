@@ -32,16 +32,9 @@ router.post('/', async (req, res) => {
       });
 
       scored.sort((a, b) => b.similarity - a.similarity);
-      const topProducts = scored.filter((p) => p.similarity > 0.3).slice(0, 5);
-
-      // Nếu không tìm được sản phẩm nào liên quan - báo ngay, không cần gọi AI
-      if (topProducts.length === 0) {
-        return res.json({
-          reply: 'Xin lỗi, mình chưa tìm thấy sản phẩm phù hợp với yêu cầu của bạn trong shop.',
-          products: [],
-          usedAI: false
-        });
-      }
+      const topProducts = scored.filter((p) => p.similarity > 0.45).slice(0, 5);
+// Không return sớm nữa - luôn cho Gemini xử lý, vì Gemini giờ đã biết cách trả lời
+// cả câu hỏi chung (không liên quan sản phẩm) nhờ SITE_INFO trong prompt
 
       // BƯỚC GENERATION: thử gọi Gemini để có câu trả lời tự nhiên
       try {

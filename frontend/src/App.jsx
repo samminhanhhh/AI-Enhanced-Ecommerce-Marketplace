@@ -14,6 +14,7 @@ import ProductDetail from './pages/ProductDetail';
 import Profile from './pages/Profile';
 import SellerOrders from './pages/SellerOrders';
 import ShopProfile from './pages/ShopProfile';
+import Messages from './pages/Messages';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/seller-orders" element={<SellerOrders />} />
         <Route path="/shop/:id" element={<ShopProfile />} />
+        <Route path="/messages" element={<Messages />} />
       </Routes>
     </BrowserRouter>
   );

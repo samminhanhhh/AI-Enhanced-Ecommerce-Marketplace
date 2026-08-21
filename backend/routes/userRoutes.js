@@ -121,7 +121,9 @@ router.get('/:id/shop', (req, res) => {
   const sellerId = req.params.id;
 
   db.query(
-    `SELECT id, name, phone, address, avatar_url, created_at FROM users WHERE id = ? AND role = 'seller'`,
+    `SELECT id, name, phone, address, avatar_url, created_at, last_active,
+     (TIMESTAMPDIFF(MINUTE, last_active, NOW()) <= 5) AS is_online
+     FROM users WHERE id = ? AND role = 'seller'`,
     [sellerId],
     (err, results) => {
       if (err) return res.status(500).json({ message: 'Lỗi server' });

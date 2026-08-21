@@ -7,6 +7,11 @@ function ShopProfile() {
   const navigate = useNavigate();
   const [shop, setShop] = useState(null);
 
+  const handleMessage = async () => {
+  const res = await api.post('/messages/start', { seller_id: id });
+  navigate(`/messages?open=${res.data.conversationId}`);
+};
+
   useEffect(() => {
     api.get(`/users/${id}/shop`).then((res) => setShop(res.data)).catch(() => setShop(null));
   }, [id]);
@@ -18,10 +23,20 @@ function ShopProfile() {
       <div className="card" style={{ marginBottom: 24 }}>
         <h2 style={{ margin: 0 }}>🏪 {shop.name}</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 6 }}>
-          Tham gia từ: {new Date(shop.created_at).toLocaleDateString('vi-VN')}
-        </p>
+  Tham gia từ: {new Date(shop.created_at).toLocaleDateString('vi-VN')}
+</p>
+<p style={{ fontSize: 14, marginTop: 4 }}>
+  {shop.is_online ? (
+    <span style={{ color: 'var(--success)' }}>🟢 Đang hoạt động</span>
+  ) : (
+    <span style={{ color: 'var(--text-muted)' }}>⚪ Ngoại tuyến</span>
+  )}
+</p>
         {shop.phone && <p style={{ fontSize: 14 }}>📞 Liên hệ: {shop.phone}</p>}
         {shop.address && <p style={{ fontSize: 14 }}>📍 Địa chỉ: {shop.address}</p>}
+        {JSON.parse(localStorage.getItem('user') || 'null')?.role === 'buyer' && (
+  <button onClick={handleMessage} style={{ marginTop: 10 }}>💬 Nhắn tin cho shop</button>
+)}
       </div>
 
       <h3>Sản phẩm đang bán ({shop.products.length})</h3>

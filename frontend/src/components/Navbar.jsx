@@ -22,10 +22,10 @@ function Navbar() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/login');
-  };
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  window.location.href = '/login'; // tải lại toàn bộ trang, xóa sạch mọi state cũ (kể cả chatbot)
+};
 
   const linkStyle = { color: 'var(--text)', fontWeight: 500, fontSize: 14 };
 
@@ -58,6 +58,7 @@ function Navbar() {
       {user?.role === 'buyer' && <Link to="/cart" style={linkStyle}>Giỏ hàng</Link>}
       {user?.role === 'buyer' && <Link to="/orders" style={linkStyle}>Đơn hàng của tôi</Link>}
       {user?.role === 'admin' && <Link to="/admin" style={linkStyle}>Quản trị</Link>}
+      {user && <Link to="/messages" style={linkStyle}>Tin nhắn</Link>}
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
         {user ? (

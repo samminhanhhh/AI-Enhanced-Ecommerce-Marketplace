@@ -1,8 +1,7 @@
 const jwt = require('jsonwebtoken');
+const db = require('../db');
 
-// Middleware 1: Kiểm tra đã đăng nhập chưa (có token hợp lệ không)
 function verifyToken(req, res, next) {
-  // Token thường được gửi kèm trong header dạng: "Bearer <token>"
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -14,14 +13,15 @@ function verifyToken(req, res, next) {
     if (err) {
       return res.status(403).json({ message: 'Token không hợp lệ hoặc đã hết hạn' });
     }
-    // Lưu thông tin user đã giải mã được vào req, để các bước sau dùng
-    req.user = decoded; // decoded = { id, role }
-    next(); // Cho phép đi tiếp
+    req.user = decoded;
+
+    // Cập nhật thời gian hoạt động gần nhất - không cần chờ kết quả (fire and forget)
+    db.query('UPDATE users SET last_active = NOW() WHERE id = ?', [decoded.id], () => {});
+
+    next();
   });
 }
 
-// Middleware 2: Kiểm tra vai trò (dùng SAU verifyToken)
-// allowedRoles là 1 mảng, ví dụ: ['seller', 'admin']
 function checkRole(allowedRoles) {
   return (req, res, next) => {
     if (!allowedRoles.includes(req.user.role)) {
