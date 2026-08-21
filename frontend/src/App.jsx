@@ -9,6 +9,7 @@ import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
 import Admin from './pages/Admin';
 import ProductDetail from './pages/ProductDetail';
+import Chatbot from './components/Chatbot';
 
 function Home() {
   return <h2 style={{ textAlign: 'center', marginTop: 50 }}>Trang chủ (đang xây dựng)</h2>;
@@ -18,6 +19,7 @@ function App() {
   return (
     <BrowserRouter>
       <Navbar />
+      <Chatbot />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/register" element={<Register />} />
