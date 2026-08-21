@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../api/axios';
+import ReviewForm from '../components/ReviewForm';
 
 function ProductDetail() {
   const { id } = useParams(); // lấy :id từ URL
@@ -9,11 +10,14 @@ function ProductDetail() {
   const [similar, setSimilar] = useState([]);
   const [reviews, setReviews] = useState([]);
   const user = JSON.parse(localStorage.getItem('user') || 'null');
+  const fetchReviews = () => {
+  api.get(`/reviews/product/${id}`).then((res) => setReviews(res.data));
+};
 
   useEffect(() => {
     api.get(`/products/${id}`).then((res) => setProduct(res.data));
     api.get(`/products/${id}/similar`).then((res) => setSimilar(res.data)).catch(() => setSimilar([]));
-    api.get(`/reviews/product/${id}`).then((res) => setReviews(res.data));
+    fetchReviews();
   }, [id]);
 
   const handleAddToCart = async () => {
@@ -83,15 +87,21 @@ function ProductDetail() {
 
       {/* Đánh giá */}
       <div style={{ marginTop: 40 }}>
-        <h3>Đánh giá ({reviews.length})</h3>
-        {reviews.length === 0 && <p>Chưa có đánh giá nào.</p>}
-        {reviews.map((r) => (
-          <div key={r.id} style={{ borderBottom: '1px solid #333', padding: '10px 0' }}>
-            <p style={{ fontWeight: 'bold' }}>{r.user_name} — {'⭐'.repeat(r.rating)}</p>
-            <p>{r.comment}</p>
-          </div>
-        ))}
-      </div>
+  <h3>Đánh giá ({reviews.length})</h3>
+
+  {user?.role === 'buyer' && <ReviewForm productId={id} onReviewAdded={fetchReviews} />}
+
+  {reviews.length === 0 && <p>Chưa có đánh giá nào.</p>}
+  {reviews.map((r) => (
+    <div key={r.id} style={{ borderBottom: '1px solid #333', padding: '10px 0' }}>
+      <p style={{ fontWeight: 'bold' }}>{r.user_name} — {'⭐'.repeat(r.rating)}</p>
+      <p>{r.comment}</p>
+      {r.image_url && (
+        <img src={`http://localhost:5000${r.image_url}`} alt="Ảnh đánh giá" style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: 8, marginTop: 6 }} />
+      )}
+    </div>
+  ))}
+</div>
     </div>
   );
 }

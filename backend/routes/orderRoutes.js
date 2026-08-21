@@ -113,6 +113,58 @@ router.get('/', verifyToken, (req, res) => {
   });
 });
 
+// GET - Đơn hàng có chứa sản phẩm của seller đang đăng nhập (CHỈ hiện đúng phần sản phẩm của mình trong đơn)
+router.get('/seller', verifyToken, checkRole(['seller']), (req, res) => {
+  const sellerId = req.user.id;
+
+  const ordersSql = `SELECT o.id, o.created_at, o.payment_method, o.payment_status,
+                     o.shipping_status, o.shipping_address, o.total_amount,
+                     u.name AS customer_name, u.phone AS customer_phone
+                     FROM orders o
+                     JOIN users u ON o.user_id = u.id
+                     WHERE EXISTS (
+                       SELECT 1 FROM order_items oi
+                       JOIN products p ON oi.product_id = p.id
+                       WHERE oi.order_id = o.id AND p.seller_id = ?
+                     )
+                     ORDER BY o.created_at DESC`;
+
+  db.query(ordersSql, [sellerId], (err, orders) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    if (orders.length === 0) return res.json([]);
+
+    const orderIds = orders.map((o) => o.id);
+    const itemsSql = `SELECT oi.order_id, oi.quantity, oi.price_at_purchase, p.name
+                      FROM order_items oi
+                      JOIN products p ON oi.product_id = p.id
+                      WHERE oi.order_id IN (?) AND p.seller_id = ?`;
+
+    db.query(itemsSql, [orderIds, sellerId], (err, items) => {
+      if (err) return res.status(500).json({ message: 'Lỗi server' });
+
+      const result = orders.map((o) => ({
+        ...o,
+        items: items.filter((i) => i.order_id === o.id)
+      }));
+      res.json(result);
+    });
+  });
+});
+
+// GET - Đếm số đơn hàng đang "chờ xác nhận" chứa sản phẩm của seller (dùng cho badge thông báo)
+router.get('/seller/pending-count', verifyToken, checkRole(['seller']), (req, res) => {
+  const sql = `SELECT COUNT(DISTINCT o.id) AS count FROM orders o
+              WHERE o.shipping_status = 'pending' AND EXISTS (
+                SELECT 1 FROM order_items oi
+                JOIN products p ON oi.product_id = p.id
+                WHERE oi.order_id = o.id AND p.seller_id = ?
+              )`;
+  db.query(sql, [req.user.id], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    res.json({ count: results[0].count });
+  });
+});
+
 // GET - Xem chi tiết 1 đơn hàng (kèm danh sách sản phẩm trong đơn)
 router.get('/:id', verifyToken, (req, res) => {
   db.query('SELECT * FROM orders WHERE id = ? AND user_id = ?', [req.params.id, req.user.id], (err, orders) => {

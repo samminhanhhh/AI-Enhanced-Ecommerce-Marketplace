@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -7,6 +7,12 @@ function Checkout() {
   const [address, setAddress] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    api.get('/users/me').then((res) => {
+      if (res.data.address) setAddress(res.data.address);
+    });
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

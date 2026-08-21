@@ -85,4 +85,35 @@ router.get('/profile', verifyToken, (req, res) => {
   res.json({ message: 'Đây là thông tin của bạn', user: req.user });
 });
 
+// GET - Xem hồ sơ cá nhân của chính mình
+router.get('/me', verifyToken, (req, res) => {
+  db.query(
+    'SELECT id, name, email, role, phone, address, avatar_url, created_at FROM users WHERE id = ?',
+    [req.user.id],
+    (err, results) => {
+      if (err) return res.status(500).json({ message: 'Lỗi server' });
+      if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+      res.json(results[0]);
+    }
+  );
+});
+
+// PUT - Cập nhật hồ sơ cá nhân (tên, số điện thoại, địa chỉ)
+router.put('/me', verifyToken, (req, res) => {
+  const { name, phone, address } = req.body;
+
+  if (!name || name.trim() === '') {
+    return res.status(400).json({ message: 'Vui lòng nhập tên' });
+  }
+
+  db.query(
+    'UPDATE users SET name = ?, phone = ?, address = ? WHERE id = ?',
+    [name, phone || null, address || null, req.user.id],
+    (err) => {
+      if (err) return res.status(500).json({ message: 'Lỗi server' });
+      res.json({ message: 'Cập nhật hồ sơ thành công' });
+    }
+  );
+});
+
 module.exports = router;

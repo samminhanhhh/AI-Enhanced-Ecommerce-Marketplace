@@ -2,9 +2,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { verifyToken } = require('../middleware/authMiddleware');
+const upload = require('../middleware/upload');
 
-// POST - Viết đánh giá cho 1 sản phẩm (CHỈ khi đã từng mua sản phẩm đó)
-router.post('/', verifyToken, (req, res) => {
+// POST - Viết đánh giá (CHỈ khi đã mua), ảnh là TÙY CHỌN
+router.post('/', verifyToken, upload.single('image'), (req, res) => {
   const { product_id, rating, comment } = req.body;
   const userId = req.user.id;
 
@@ -12,7 +13,6 @@ router.post('/', verifyToken, (req, res) => {
     return res.status(400).json({ message: 'Vui lòng nhập đủ sản phẩm và số sao (1-5)' });
   }
 
-  // Kiểm tra user này đã từng mua sản phẩm này chưa (qua order_items + orders)
   const checkPurchaseSql = `SELECT oi.id FROM order_items oi
                             JOIN orders o ON oi.order_id = o.id
                             WHERE o.user_id = ? AND oi.product_id = ?
@@ -23,15 +23,16 @@ router.post('/', verifyToken, (req, res) => {
       return res.status(403).json({ message: 'Bạn cần mua sản phẩm này trước khi đánh giá' });
     }
 
-    // Kiểm tra đã review sản phẩm này trước đó chưa (tránh review trùng)
     db.query('SELECT id FROM reviews WHERE user_id = ? AND product_id = ?', [userId, product_id], (err, existing) => {
       if (err) return res.status(500).json({ message: 'Lỗi server' });
       if (existing.length > 0) {
         return res.status(409).json({ message: 'Bạn đã đánh giá sản phẩm này rồi' });
       }
 
-      const sql = 'INSERT INTO reviews (user_id, product_id, rating, comment) VALUES (?, ?, ?, ?)';
-      db.query(sql, [userId, product_id, rating, comment || null], (err, result) => {
+      const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+
+      const sql = 'INSERT INTO reviews (user_id, product_id, rating, comment, image_url) VALUES (?, ?, ?, ?, ?)';
+      db.query(sql, [userId, product_id, rating, comment || null, imageUrl], (err, result) => {
         if (err) return res.status(500).json({ message: 'Lỗi server' });
         res.status(201).json({ message: 'Đánh giá thành công', reviewId: result.insertId });
       });
