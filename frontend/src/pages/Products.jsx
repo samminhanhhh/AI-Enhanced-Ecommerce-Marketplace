@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 function Products() {
   const [products, setProducts] = useState([]);
@@ -9,18 +9,22 @@ function Products() {
   const [noExactMatch, setNoExactMatch] = useState(false);
   const user = JSON.parse(localStorage.getItem('user') || 'null');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const categoryFilter = searchParams.get('category');
 
   const fetchAllProducts = async () => {
-    setLoading(true);
-    setNoExactMatch(false);
-    try {
-      const res = await api.get('/products');
-      setProducts(res.data);
-    } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
-  };
+  setLoading(true);
+  setNoExactMatch(false);
+  try {
+    const res = await api.get('/products', {
+      params: categoryFilter ? { category_id: categoryFilter } : {}
+    });
+    setProducts(res.data);
+  } catch (err) {
+    console.error(err);
+  }
+  setLoading(false);
+};
 
   const fetchSemanticSearch = async (query) => {
     setLoading(true);
@@ -35,8 +39,8 @@ function Products() {
   };
 
   useEffect(() => {
-    fetchAllProducts();
-  }, []);
+  fetchAllProducts();
+}, [categoryFilter]);
 
   const handleSearch = (e) => {
     e.preventDefault();

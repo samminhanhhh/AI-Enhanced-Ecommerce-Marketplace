@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import Chatbot from './components/Chatbot';
+import Home from './pages/Home';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import Products from './pages/Products';
@@ -9,14 +11,9 @@ import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
 import Admin from './pages/Admin';
 import ProductDetail from './pages/ProductDetail';
-import Chatbot from './components/Chatbot';
 import Profile from './pages/Profile';
 import SellerOrders from './pages/SellerOrders';
 import ShopProfile from './pages/ShopProfile';
-
-function Home() {
-  return <h2 style={{ textAlign: 'center', marginTop: 50 }}>Trang chủ (đang xây dựng)</h2>;
-}
 
 function App() {
   return (
