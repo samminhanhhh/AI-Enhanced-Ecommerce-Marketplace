@@ -51,7 +51,15 @@ function ProductDetail() {
 )}
         <div>
           <h2>{product.name}</h2>
-          <p style={{ color: '#aaa' }}>{product.category_name} — Người bán: {product.seller_name}</p>
+          <p style={{ color: '#aaa' }}>
+  {product.category_name} — Người bán:{' '}
+  <span
+    onClick={() => navigate(`/shop/${product.seller_id}`)}
+    style={{ color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline' }}
+  >
+    {product.seller_name}
+  </span>
+</p>
           <p style={{ fontSize: 22, fontWeight: 'bold' }}>{Number(product.price).toLocaleString('vi-VN')}đ</p>
           <p>Còn lại: {product.stock}</p>
           <p style={{ marginTop: 12 }}>{product.description}</p>

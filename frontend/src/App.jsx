@@ -12,6 +12,7 @@ import ProductDetail from './pages/ProductDetail';
 import Chatbot from './components/Chatbot';
 import Profile from './pages/Profile';
 import SellerOrders from './pages/SellerOrders';
+import ShopProfile from './pages/ShopProfile';
 
 function Home() {
   return <h2 style={{ textAlign: 'center', marginTop: 50 }}>Trang chủ (đang xây dựng)</h2>;
@@ -35,6 +36,7 @@ function App() {
         <Route path="/products/:id" element={<ProductDetail />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/seller-orders" element={<SellerOrders />} />
+        <Route path="/shop/:id" element={<ShopProfile />} />
       </Routes>
     </BrowserRouter>
   );

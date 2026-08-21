@@ -116,4 +116,29 @@ router.put('/me', verifyToken, (req, res) => {
   );
 });
 
+// GET - Xem hồ sơ công khai của 1 seller (ai cũng xem được, không cần đăng nhập)
+router.get('/:id/shop', (req, res) => {
+  const sellerId = req.params.id;
+
+  db.query(
+    `SELECT id, name, phone, address, avatar_url, created_at FROM users WHERE id = ? AND role = 'seller'`,
+    [sellerId],
+    (err, results) => {
+      if (err) return res.status(500).json({ message: 'Lỗi server' });
+      if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy cửa hàng' });
+
+      const seller = results[0];
+
+      // Lấy luôn danh sách sản phẩm đang bán của shop này
+      const productsSql = `SELECT p.id, p.name, p.price,
+                           (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image
+                           FROM products p WHERE p.seller_id = ? AND p.status = 'active'`;
+      db.query(productsSql, [sellerId], (err, products) => {
+        if (err) return res.status(500).json({ message: 'Lỗi server' });
+        res.json({ ...seller, products });
+      });
+    }
+  );
+});
+
 module.exports = router;
