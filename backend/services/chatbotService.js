@@ -10,7 +10,7 @@ function getGeminiClient() {
 
 // Thông tin cơ bản về website - giúp AI trả lời được câu hỏi KHÔNG liên quan tìm sản phẩm
 const SITE_INFO = `
-Thông tin về sàn thương mại điện tử ShopSmart:
+Thông tin về sàn thương mại điện tử ShopShop:
 - Đăng ký tài khoản: nhấn nút "Đăng ký" ở góc trên bên phải, điền tên, email, mật khẩu và chọn vai trò (Người mua hoặc Người bán).
 - Đăng nhập: nhấn "Đăng nhập", nhập email và mật khẩu đã đăng ký.
 - Thanh toán: hỗ trợ tiền mặt khi nhận hàng (COD), chuyển khoản ngân hàng, và ví Momo (quét mã QR khi checkout).
@@ -28,7 +28,7 @@ async function generateChatResponse(userQuestion, relevantProducts) {
         .join('\n')
     : '(Không có sản phẩm nào đủ liên quan đến câu hỏi này)';
 
-  const prompt = `Bạn là trợ lý ảo của sàn thương mại điện tử ShopSmart, hỗ trợ cả việc TÌM SẢN PHẨM và GIẢI ĐÁP THẮC MẮC về cách dùng website.
+  const prompt = `Bạn là trợ lý ảo của sàn thương mại điện tử ShopShop, hỗ trợ cả việc TÌM SẢN PHẨM và GIẢI ĐÁP THẮC MẮC về cách dùng website.
 
 ${SITE_INFO}
 
