@@ -2,17 +2,20 @@ import { useState, useEffect } from 'react';
 import api from '../api/axios';
 
 function Admin() {
-  const [tab, setTab] = useState('users');
-  const [categories, setCategories] = useState([]);
-  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
-  const [users, setUsers] = useState([]);
-  const [pendingProducts, setPendingProducts] = useState([]);
-  const [orders, setOrders] = useState([]);
+const [tab, setTab] = useState('users');
+const [editingCategory, setEditingCategory] = useState(null);
+const [users, setUsers] = useState([]);
+const [pendingProducts, setPendingProducts] = useState([]);
+const [orders, setOrders] = useState([]);
+const [categories, setCategories] = useState([]);
+const [newCategory, setNewCategory] = useState({ name: '', description: '', icon: '📦' });
 
   const fetchUsers = () => api.get('/admin/users').then((res) => setUsers(res.data));
   const fetchCategories = () => api.get('/categories').then((res) => setCategories(res.data));
   const fetchPendingProducts = () => api.get('/admin/products/pending').then((res) => setPendingProducts(res.data));
   const fetchOrders = () => api.get('/admin/orders').then((res) => setOrders(res.data));
+
+  const ICON_OPTIONS = ['👕', '👗', '👟', '📱', '💻', '🏠', '🍳', '💄', '📚', '🎒', '🧸', '⚽', '🐾', '🚗', '📦'];
 
   useEffect(() => {
     fetchUsers();
@@ -36,13 +39,33 @@ function Admin() {
     fetchOrders();
   };
 
-  const handleCreateCategory = async (e) => {
-    e.preventDefault();
-    if (!newCategory.name.trim()) return;
+  const handleSaveCategory = async (e) => {
+  e.preventDefault();
+  if (!newCategory.name.trim()) return;
+  if (editingCategory) {
+    await api.put(`/categories/${editingCategory}`, newCategory);
+    setEditingCategory(null);
+  } else {
     await api.post('/categories', newCategory);
-    setNewCategory({ name: '', description: '' });
+  }
+  setNewCategory({ name: '', description: '', icon: '📦' });
+  fetchCategories();
+};
+
+const handleEditCategory = (c) => {
+  setEditingCategory(c.id);
+  setNewCategory({ name: c.name, description: c.description || '', icon: c.icon || '📦' });
+};
+
+const handleDeleteCategory = async (id) => {
+  if (!confirm('Xóa danh mục này?')) return;
+  try {
+    await api.delete(`/categories/${id}`);
     fetchCategories();
-  };
+  } catch (err) {
+    alert(err.response?.data?.message || 'Có lỗi xảy ra');
+  }
+};
 
   const tabButtonStyle = (t) => ({
     padding: '9px 18px',
@@ -145,32 +168,49 @@ function Admin() {
       )}
 
       {tab === 'categories' && (
-        <div>
-          <form onSubmit={handleCreateCategory} className="card" style={{ marginBottom: 20 }}>
-            <p style={{ fontWeight: 700, marginBottom: 12 }}>Thêm danh mục mới</p>
-            <input
-              placeholder="Tên danh mục"
-              value={newCategory.name}
-              onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-              style={{ marginRight: 8, marginBottom: 8 }}
-            />
-            <input
-              placeholder="Mô tả (không bắt buộc)"
-              value={newCategory.description}
-              onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
-              style={{ marginRight: 8, marginBottom: 8 }}
-            />
-            <button type="submit">Thêm danh mục</button>
-          </form>
+  <div>
+    <form onSubmit={handleSaveCategory} className="card" style={{ marginBottom: 20 }}>
+      <p style={{ fontWeight: 700, marginBottom: 12 }}>{editingCategory ? 'Sửa danh mục' : 'Thêm danh mục mới'}</p>
 
-          {categories.map((c) => (
-            <div key={c.id} className="card" style={{ marginBottom: 10 }}>
-              <p style={{ fontWeight: 700 }}>{c.name}</p>
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{c.description}</p>
-            </div>
-          ))}
-        </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {ICON_OPTIONS.map((icon) => (
+          <span
+            key={icon}
+            onClick={() => setNewCategory({ ...newCategory, icon })}
+            style={{
+              fontSize: 22, cursor: 'pointer', padding: 6, borderRadius: 10,
+              background: newCategory.icon === icon ? 'var(--ai-light)' : 'transparent',
+              border: newCategory.icon === icon ? '2px solid var(--ai)' : '2px solid transparent'
+            }}
+          >
+            {icon}
+          </span>
+        ))}
+      </div>
+
+      <input placeholder="Tên danh mục" value={newCategory.name} onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })} style={{ marginRight: 8, marginBottom: 8 }} />
+      <input placeholder="Mô tả" value={newCategory.description} onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })} style={{ marginRight: 8, marginBottom: 8 }} />
+      <button type="submit">{editingCategory ? 'Lưu thay đổi' : 'Thêm danh mục'}</button>
+      {editingCategory && (
+        <button type="button" className="btn-secondary" style={{ marginLeft: 8 }} onClick={() => { setEditingCategory(null); setNewCategory({ name: '', description: '', icon: '📦' }); }}>
+          Hủy
+        </button>
       )}
+    </form>
+
+    {categories.map((c) => (
+      <div key={c.id} className="card" style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 26 }}>{c.icon || '📦'}</span>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontWeight: 700 }}>{c.name}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{c.description}</p>
+        </div>
+        <button onClick={() => handleEditCategory(c)} className="btn-secondary" style={{ padding: '6px 14px', fontSize: 13 }}>Sửa</button>
+        <button onClick={() => handleDeleteCategory(c.id)} className="btn-secondary" style={{ padding: '6px 14px', fontSize: 13, color: 'var(--danger)' }}>Xóa</button>
+      </div>
+    ))}
+  </div>
+)}
     </div>
   );
 }

@@ -13,8 +13,6 @@ function Home() {
     api.get('/products').then((res) => setFeaturedProducts(res.data.slice(0, 8)));
   }, []);
 
-  const categoryIcons = ['👕', '📱', '🏠', '👗', '👟', '🎒', '💄', '📚'];
-
   const handleSearch = (e) => {
     e.preventDefault();
     if (search.trim()) navigate(`/products?q=${encodeURIComponent(search)}`);
@@ -63,7 +61,7 @@ function Home() {
               className="card"
               style={{ textAlign: 'center', cursor: 'pointer' }}
             >
-              <div style={{ fontSize: 30 }}>{categoryIcons[i % categoryIcons.length]}</div>
+              <div style={{ fontSize: 30 }}>{c.icon || '📦'}</div>
               <p style={{ fontSize: 13, marginTop: 8, fontWeight: 600 }}>{c.name}</p>
             </div>
           ))}

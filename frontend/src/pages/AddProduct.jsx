@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
+
 function AddProduct() {
+  const [createdProductId, setCreatedProductId] = useState(null);
+  const [variants, setVariants] = useState([]);
+  const [newVariant, setNewVariant] = useState({ variant_name: '', price_extra: 0 });
   const [categories, setCategories] = useState([]);
   const [formData, setFormData] = useState({
     name: '', description: '', price: '', stock: '', category_id: ''
@@ -20,29 +24,34 @@ function AddProduct() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    try {
-      // Bước 1: tạo sản phẩm (chưa có ảnh)
-      const res = await api.post('/products', formData);
-      const newProductId = res.data.productId;
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
+  try {
+    const res = await api.post('/products', formData);
+    const newProductId = res.data.productId;
 
-      // Bước 2: nếu có chọn ảnh, upload ảnh cho sản phẩm vừa tạo
-      if (imageFile) {
-        const imgForm = new FormData();
-        imgForm.append('image', imageFile);
-        await api.post(`/products/${newProductId}/images`, imgForm, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-      }
-
-      alert('Đăng sản phẩm thành công!');
-      navigate('/products');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Có lỗi xảy ra');
+    if (imageFile) {
+      const imgForm = new FormData();
+      imgForm.append('image', imageFile);
+      await api.post(`/products/${newProductId}/images`, imgForm, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
     }
-  };
+
+    setCreatedProductId(newProductId); // hiện phần thêm biến thể thay vì chuyển trang ngay
+  } catch (err) {
+    setError(err.response?.data?.message || 'Có lỗi xảy ra');
+  }
+};
+
+const handleAddVariant = async (e) => {
+  e.preventDefault();
+  if (!newVariant.variant_name.trim()) return;
+  await api.post(`/products/${createdProductId}/variants`, newVariant);
+  setVariants([...variants, newVariant]);
+  setNewVariant({ variant_name: '', price_extra: 0 });
+};
 
   return (
     <div style={{ maxWidth: 500, margin: '30px auto' }}>
@@ -66,6 +75,34 @@ function AddProduct() {
         {error && <p style={{ color: 'red' }}>{error}</p>}
         <button type="submit">Đăng sản phẩm</button>
       </form>
+          {createdProductId && (
+  <div className="card" style={{ marginTop: 20 }}>
+    <p style={{ fontWeight: 700, marginBottom: 10 }}>Thêm biến thể (không bắt buộc)</p>
+    <form onSubmit={handleAddVariant} style={{ marginBottom: 12 }}>
+      <input
+        placeholder="VD: Size M - Đỏ"
+        value={newVariant.variant_name}
+        onChange={(e) => setNewVariant({ ...newVariant, variant_name: e.target.value })}
+        style={{ marginRight: 8, marginBottom: 8 }}
+      />
+      <input
+        type="number"
+        placeholder="Phụ thu (VNĐ, để 0 nếu không đổi giá)"
+        value={newVariant.price_extra}
+        onChange={(e) => setNewVariant({ ...newVariant, price_extra: e.target.value })}
+        style={{ marginRight: 8, marginBottom: 8 }}
+      />
+      <button type="submit">Thêm biến thể</button>
+    </form>
+
+    {variants.map((v, i) => <p key={i} style={{ fontSize: 14 }}>• {v.variant_name} (+{Number(v.price_extra).toLocaleString('vi-VN')}đ)</p>)}
+
+    <button onClick={() => navigate('/products')} className="btn-secondary" style={{ marginTop: 12 }}>
+      Hoàn tất, xem sản phẩm
+    </button>
+  </div>
+)}
+
     </div>
   );
 }

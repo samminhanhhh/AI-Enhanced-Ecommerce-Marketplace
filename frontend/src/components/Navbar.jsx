@@ -8,14 +8,18 @@ function Navbar() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    if (user?.role !== 'seller') return;
-    const fetchCount = () => {
-      api.get('/orders/seller/pending-count').then((res) => setPendingCount(res.data.count)).catch(() => {});
-    };
-    fetchCount();
-    const interval = setInterval(fetchCount, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  if (!user) return;
+
+  const fetchCount = () => {
+    const endpoint = user.role === 'seller' ? '/orders/seller/pending-count' : user.role === 'buyer' ? '/orders/buyer/unseen-count' : null;
+    if (!endpoint) return;
+    api.get(endpoint).then((res) => setPendingCount(res.data.count)).catch(() => {});
+  };
+
+  fetchCount();
+  const interval = setInterval(fetchCount, 15000); // 15s cho cảm giác gần real-time hơn
+  return () => clearInterval(interval);
+}, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -67,7 +71,20 @@ function Navbar() {
         </Link>
       )}
       {user?.role === 'buyer' && <Link to="/cart" className="nav-link">Giỏ hàng</Link>}
-      {user?.role === 'buyer' && <Link to="/orders" className="nav-link">Đơn hàng của tôi</Link>}
+      {user?.role === 'buyer' && (
+  <Link to="/orders" className="nav-link" style={{ position: 'relative' }}>
+    Đơn hàng của tôi
+    {pendingCount > 0 && (
+      <span style={{
+        position: 'absolute', top: -8, right: -18,
+        background: 'var(--danger)', color: 'white',
+        borderRadius: '50%', fontSize: 11, fontWeight: 700, padding: '1px 6px'
+      }}>
+        {pendingCount}
+      </span>
+    )}
+  </Link>
+)}
       {user?.role === 'admin' && <Link to="/admin" className="nav-link">Quản trị</Link>}
       {user && <Link to="/messages" className="nav-link">Tin nhắn</Link>}
 

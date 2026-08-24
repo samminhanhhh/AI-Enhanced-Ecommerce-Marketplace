@@ -300,4 +300,45 @@ router.get('/:id/images', (req, res) => {
   });
 });
  
+// POST - Seller thêm biến thể cho sản phẩm
+router.post('/:id/variants', verifyToken, checkRole(['seller']), (req, res) => {
+  const { variant_name, price_extra } = req.body;
+  const productId = req.params.id;
+  if (!variant_name) return res.status(400).json({ message: 'Vui lòng nhập tên biến thể' });
+
+  db.query('SELECT seller_id FROM products WHERE id = ?', [productId], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
+    if (results[0].seller_id !== req.user.id) return res.status(403).json({ message: 'Không có quyền' });
+
+    db.query('INSERT INTO product_variants (product_id, variant_name, price_extra) VALUES (?, ?, ?)',
+      [productId, variant_name, price_extra || 0], (err, result) => {
+        if (err) return res.status(500).json({ message: 'Lỗi server' });
+        res.status(201).json({ message: 'Đã thêm biến thể', variantId: result.insertId });
+      });
+  });
+});
+
+// GET - Xem biến thể của 1 sản phẩm (công khai)
+router.get('/:id/variants', (req, res) => {
+  db.query('SELECT * FROM product_variants WHERE product_id = ?', [req.params.id], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    res.json(results);
+  });
+});
+
+// DELETE - Xóa 1 biến thể (seller sở hữu)
+router.delete('/variants/:variantId', verifyToken, checkRole(['seller']), (req, res) => {
+  const sql = `SELECT p.seller_id FROM product_variants pv JOIN products p ON pv.product_id = p.id WHERE pv.id = ?`;
+  db.query(sql, [req.params.variantId], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy biến thể' });
+    if (results[0].seller_id !== req.user.id) return res.status(403).json({ message: 'Không có quyền' });
+    db.query('DELETE FROM product_variants WHERE id = ?', [req.params.variantId], (err) => {
+      if (err) return res.status(500).json({ message: 'Lỗi server' });
+      res.json({ message: 'Đã xóa biến thể' });
+    });
+  });
+});
+
 module.exports = router;

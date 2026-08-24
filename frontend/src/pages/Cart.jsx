@@ -61,7 +61,9 @@ function Cart() {
           )}
 
           <div style={{ flex: 1 }}>
-            <p style={{ fontWeight: 'bold' }}>{item.name}</p>
+            <p style={{ fontWeight: 'bold' }}>
+  {item.name} {item.variant_name && <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--text-muted)' }}>({item.variant_name})</span>}
+</p>
             <p>{Number(item.price).toLocaleString('vi-VN')}đ</p>
           </div>
 
