@@ -30,7 +30,9 @@ router.put('/users/:id/toggle-status', (req, res) => {
 
 // GET - Danh sách sản phẩm CHỜ DUYỆT
 router.get('/products/pending', (req, res) => {
-  const sql = `SELECT p.*, u.name AS seller_name FROM products p
+  const sql = `SELECT p.*, u.name AS seller_name,
+              (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image
+              FROM products p
               JOIN users u ON p.seller_id = u.id
               WHERE p.status = 'pending'`;
   db.query(sql, (err, results) => {

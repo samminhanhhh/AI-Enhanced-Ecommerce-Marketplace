@@ -40,9 +40,11 @@ function getSellerIdsForOrder(orderId, callback) {
 
 // POST - Đặt hàng (checkout) - dùng TRANSACTION
 router.post('/', verifyToken, (req, res) => {
-  const { payment_method, shipping_address } = req.body;
+  const { payment_method, shipping_address, selected_item_ids } = req.body;
+if (!payment_method || !shipping_address || !selected_item_ids || selected_item_ids.length === 0) {
+  return res.status(400).json({ message: 'Vui lòng chọn sản phẩm và điền đủ thông tin' });
+}
   const userId = req.user.id;
-
   if (!payment_method || !shipping_address) {
     return res.status(400).json({ message: 'Vui lòng chọn phương thức thanh toán và địa chỉ giao hàng' });
   }
@@ -58,14 +60,14 @@ router.post('/', verifyToken, (req, res) => {
       }
 
       // Bước 1: Lấy giỏ hàng + các sản phẩm trong giỏ
-      const getCartSql = `SELECT ci.product_id, ci.variant_id, ci.quantity, p.stock, p.name,
-                    (p.price + IFNULL(pv.price_extra, 0)) AS price
-                    FROM cart_items ci
-                    JOIN carts c ON ci.cart_id = c.id
-                    JOIN products p ON ci.product_id = p.id
-                    LEFT JOIN product_variants pv ON ci.variant_id = pv.id
-                    WHERE c.user_id = ?`;
-      connection.query(getCartSql, [userId], (err, cartItems) => {
+      const getCartSql = `SELECT ci.id AS cart_item_id, ci.product_id, ci.variant_id, ci.quantity, p.stock, p.name,
+              (p.price + IFNULL(pv.price_extra, 0)) AS price
+              FROM cart_items ci
+              JOIN carts c ON ci.cart_id = c.id
+              JOIN products p ON ci.product_id = p.id
+              LEFT JOIN product_variants pv ON ci.variant_id = pv.id
+              WHERE c.user_id = ? AND ci.id IN (?)`;
+connection.query(getCartSql, [userId, selected_item_ids], (err, cartItems) => {
         if (err) return rollbackAndError(connection, res, err);
 
         if (cartItems.length === 0) {
@@ -110,10 +112,8 @@ connection.query(insertItemSql, [orderId, item.product_id, item.variant_id || nu
                 // Khi đã xử lý xong HẾT các sản phẩm trong giỏ
                 if (completed === cartItems.length && !hasError) {
                   // Bước 6: Xóa giỏ hàng sau khi đặt thành công
-                  const clearCartSql = `DELETE ci FROM cart_items ci
-                                        JOIN carts c ON ci.cart_id = c.id
-                                        WHERE c.user_id = ?`;
-                  connection.query(clearCartSql, [userId], (err) => {
+                  const clearCartSql = `DELETE FROM cart_items WHERE id IN (?)`;
+connection.query(clearCartSql, [selected_item_ids], (err) => {
                     if (err) return rollbackAndError(connection, res, err);
 
                     // Bước 7: TẤT CẢ THÀNH CÔNG -> lưu thật vào database
@@ -209,12 +209,11 @@ router.get('/seller', verifyToken, checkRole(['seller']), (req, res) => {
 
 // GET - Đếm số đơn hàng đang "chờ xác nhận" chứa sản phẩm của seller (dùng cho badge thông báo)
 router.get('/seller/pending-count', verifyToken, checkRole(['seller']), (req, res) => {
-  const sql = `SELECT COUNT(DISTINCT o.id) AS count FROM orders o
-             WHERE o.shipping_status IN ('pending', 'return_requested') AND EXISTS (...)
-                SELECT 1 FROM order_items oi
-                JOIN products p ON oi.product_id = p.id
-                WHERE oi.order_id = o.id AND p.seller_id = ?
-              )`;
+  const sql = `SELECT COUNT(DISTINCT o.id) AS count
+              FROM orders o
+              JOIN order_items oi ON oi.order_id = o.id
+              JOIN products p ON oi.product_id = p.id
+              WHERE p.seller_id = ? AND o.shipping_status IN ('pending', 'return_requested')`;
   db.query(sql, [req.user.id], (err, results) => {
     if (err) return res.status(500).json({ message: 'Lỗi server' });
     res.json({ count: results[0].count });

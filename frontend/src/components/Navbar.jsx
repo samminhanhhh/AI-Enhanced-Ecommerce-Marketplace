@@ -56,6 +56,7 @@ function Navbar() {
 </Link>
       <Link to="/products" className="nav-link">Sản phẩm</Link>
       {user?.role === 'seller' && <Link to="/add-product" className="nav-link">Đăng bán</Link>}
+      {user?.role === 'seller' && <Link to="/my-products" className="nav-link">Sản phẩm của tôi</Link>}
       {user?.role === 'seller' && (
         <Link to="/seller-orders" className="nav-link" style={{ position: 'relative' }}>
           Đơn hàng cửa hàng

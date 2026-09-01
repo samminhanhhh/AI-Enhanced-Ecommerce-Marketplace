@@ -143,4 +143,11 @@ router.get('/:id/shop', (req, res) => {
   );
 });
 
+router.get('/cities', (req, res) => {
+  db.query(`SELECT DISTINCT SUBSTRING_INDEX(address, ',', -1) AS city FROM users WHERE role='seller' AND address IS NOT NULL`, (err, results) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    res.json(results.map(r => r.city.trim()).filter(Boolean));
+  });
+});
+
 module.exports = router;

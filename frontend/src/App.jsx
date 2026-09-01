@@ -15,6 +15,7 @@ import Profile from './pages/Profile';
 import SellerOrders from './pages/SellerOrders';
 import ShopProfile from './pages/ShopProfile';
 import Messages from './pages/Messages';
+import MyProducts from './pages/MyProducts';
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
         <Route path="/seller-orders" element={<SellerOrders />} />
         <Route path="/shop/:id" element={<ShopProfile />} />
         <Route path="/messages" element={<Messages />} />
+        <Route path="/my-products" element={<MyProducts />} />
       </Routes>
     </BrowserRouter>
   );

@@ -5,9 +5,12 @@ const { verifyToken, checkRole } = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 const { generateEmbedding, cosineSimilarity } = require('../services/embeddingService');
  
-// Hàm dùng chung: sinh embedding cho 1 sản phẩm (kèm tên danh mục) và lưu vào DB
-function generateAndSaveEmbedding(productId, name, description, categoryName, callback) {
-  const textToEmbed = `${name}. ${description || ''}. Danh mục: ${categoryName || ''}`;
+// Hàm dùng chung: sinh embedding cho 1 sản phẩm (kèm tên danh mục + tên các biến thể) và lưu vào DB
+function generateAndSaveEmbedding(productId, name, description, categoryName, variantNames, callback) {
+  const variantsText = (variantNames && variantNames.length > 0)
+    ? `. Các phân loại: ${variantNames.join(', ')}`
+    : '';
+  const textToEmbed = `${name}. ${description || ''}. Danh mục: ${categoryName || ''}${variantsText}`;
   generateEmbedding(textToEmbed)
     .then((vector) => {
       const vectorJson = JSON.stringify(vector);
@@ -18,6 +21,14 @@ function generateAndSaveEmbedding(productId, name, description, categoryName, ca
       );
     })
     .catch((err) => callback(err));
+}
+
+// Hàm phụ: lấy toàn bộ tên biến thể hiện có của 1 sản phẩm
+function getVariantNames(productId, callback) {
+  db.query('SELECT variant_name FROM product_variants WHERE product_id = ?', [productId], (err, results) => {
+    if (err) return callback(err);
+    callback(null, results.map((r) => r.variant_name));
+  });
 }
  
 // POST - Đăng sản phẩm mới (CHỈ seller) - TỰ ĐỘNG sinh embedding kèm tên danh mục
@@ -41,8 +52,8 @@ router.post('/', verifyToken, checkRole(['seller']), (req, res) => {
  
     // Lấy tên danh mục để nhúng cùng vào embedding
     db.query('SELECT name FROM categories WHERE id = ?', [category_id], (catErr, catResults) => {
-      const categoryName = catResults && catResults[0] ? catResults[0].name : '';
-      generateAndSaveEmbedding(newProductId, name, description, categoryName, (embErr) => {
+  const categoryName = catResults && catResults[0] ? catResults[0].name : '';
+  generateAndSaveEmbedding(newProductId, name, description, categoryName, [], (embErr) => {
         if (embErr) console.error('Lỗi sinh embedding tự động:', embErr);
         // Dù embedding lỗi, vẫn báo đăng sản phẩm thành công - không chặn luồng chính
         res.status(201).json({ message: 'Đăng sản phẩm thành công', productId: newProductId });
@@ -105,53 +116,87 @@ router.get('/search/semantic', async (req, res) => {
 });
  
 // POST - Sinh (hoặc cập nhật) embedding cho 1 sản phẩm - dùng thủ công / bù dữ liệu cũ
-router.post('/:id/generate-embedding', verifyToken, checkRole(['seller', 'admin']), (req, res) => {
-  const productId = req.params.id;
- 
-  const sql = `SELECT p.name, p.description, c.name AS category_name
-               FROM products p JOIN categories c ON p.category_id = c.id
-               WHERE p.id = ?`;
-  db.query(sql, [productId], (err, results) => {
-    if (err) return res.status(500).json({ message: 'Lỗi server' });
-    if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
- 
-    const product = results[0];
-    generateAndSaveEmbedding(productId, product.name, product.description, product.category_name, (embErr) => {
-      if (embErr) {
-        console.error(embErr);
-        return res.status(500).json({ message: 'Lỗi khi tạo embedding' });
+router.post(
+  '/:id/generate-embedding',
+  verifyToken,
+  checkRole(['seller', 'admin']),
+  (req, res) => {
+    const productId = req.params.id;
+
+    const sql = `
+      SELECT p.name, p.description, c.name AS category_name
+      FROM products p
+      JOIN categories c ON p.category_id = c.id
+      WHERE p.id = ?
+    `;
+
+    db.query(sql, [productId], (err, results) => {
+      if (err) {
+        return res.status(500).json({ message: 'Lỗi server' });
       }
-      res.json({ message: 'Đã tạo embedding cho sản phẩm' });
+
+      if (results.length === 0) {
+        return res.status(404).json({
+          message: 'Không tìm thấy sản phẩm'
+        });
+      }
+
+      const product = results[0];
+
+      getVariantNames(productId, (vErr, variantNames) => {
+
+        generateAndSaveEmbedding(
+          productId,
+          product.name,
+          product.description,
+          product.category_name,
+          variantNames || [],
+          (embErr) => {
+
+            if (embErr) {
+              console.error(embErr);
+              return res.status(500).json({
+                message: 'Lỗi khi tạo embedding'
+              });
+            }
+
+            res.json({
+              message: 'Đã tạo embedding cho sản phẩm'
+            });
+          }
+        );
+
+      });
     });
-  });
-});
+  }
+);
  
 // GET - Xem danh sách sản phẩm (có kèm ảnh đại diện, lọc theo category/tên)
 router.get('/', (req, res) => {
-  const { category_id, search } = req.query;
- 
-  let sql = `SELECT p.*, c.name AS category_name, u.name AS seller_name,
+  const { category_id, search, city } = req.query;
+  let sql = `SELECT p.*, c.name AS category_name, u.name AS seller_name, u.address AS seller_address,
              (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image
              FROM products p
              JOIN categories c ON p.category_id = c.id
              JOIN users u ON p.seller_id = u.id
              WHERE p.status = 'active'`;
   const params = [];
- 
-  if (category_id) {
-    sql += ' AND p.category_id = ?';
-    params.push(category_id);
-  }
-  if (search) {
-    sql += ' AND p.name LIKE ?';
-    params.push(`%${search}%`);
-  }
- 
+  if (category_id) { sql += ' AND p.category_id = ?'; params.push(category_id); }
+  if (search) { sql += ' AND p.name LIKE ?'; params.push(`%${search}%`); }
+  if (city) { sql += ' AND u.address LIKE ?'; params.push(`%${city}%`); }
   db.query(sql, params, (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ message: 'Lỗi server' });
-    }
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    res.json(results);
+  });
+});
+
+router.get('/mine', verifyToken, checkRole(['seller']), (req, res) => {
+  const sql = `SELECT p.*, c.name AS category_name,
+              (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS primary_image
+              FROM products p JOIN categories c ON p.category_id = c.id
+              WHERE p.seller_id = ? ORDER BY p.created_at DESC`;
+  db.query(sql, [req.user.id], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
     res.json(results);
   });
 });
@@ -214,32 +259,83 @@ router.get('/:id/similar', (req, res) => {
 router.put('/:id', verifyToken, checkRole(['seller']), (req, res) => {
   const { name, description, price, stock } = req.body;
   const productId = req.params.id;
- 
-  db.query('SELECT seller_id FROM products WHERE id = ?', [productId], (err, results) => {
-    if (err) return res.status(500).json({ message: 'Lỗi server' });
-    if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
-    if (results[0].seller_id !== req.user.id) {
-      return res.status(403).json({ message: 'Bạn không có quyền sửa sản phẩm này' });
-    }
- 
-    const sql = 'UPDATE products SET name=?, description=?, price=?, stock=? WHERE id=?';
-    db.query(sql, [name, description, price, stock, productId], (err) => {
-      if (err) return res.status(500).json({ message: 'Lỗi server' });
- 
-      // Lấy category hiện tại của sản phẩm để nhúng vào embedding
+
+  db.query(
+    'SELECT seller_id FROM products WHERE id = ?',
+    [productId],
+    (err, results) => {
+      if (err) {
+        return res.status(500).json({ message: 'Lỗi server' });
+      }
+
+      if (results.length === 0) {
+        return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
+      }
+
+      if (results[0].seller_id !== req.user.id) {
+        return res.status(403).json({
+          message: 'Bạn không có quyền sửa sản phẩm này'
+        });
+      }
+
+      const sql = `
+        UPDATE products 
+        SET name=?, description=?, price=?, stock=? 
+        WHERE id=?
+      `;
+
       db.query(
-        `SELECT c.name AS category_name FROM products p JOIN categories c ON p.category_id = c.id WHERE p.id = ?`,
-        [productId],
-        (catErr, catResults) => {
-          const categoryName = catResults && catResults[0] ? catResults[0].category_name : '';
-          generateAndSaveEmbedding(productId, name, description, categoryName, (embErr) => {
-            if (embErr) console.error('Lỗi cập nhật embedding:', embErr);
-            res.json({ message: 'Cập nhật sản phẩm thành công' });
-          });
+        sql,
+        [name, description, price, stock, productId],
+        (err) => {
+          if (err) {
+            return res.status(500).json({ message: 'Lỗi server' });
+          }
+
+          // Lấy category hiện tại của sản phẩm
+          db.query(
+            `SELECT c.name AS category_name
+             FROM products p
+             JOIN categories c ON p.category_id = c.id
+             WHERE p.id = ?`,
+            [productId],
+            (catErr, catResults) => {
+
+              const categoryName =
+                catResults && catResults[0]
+                  ? catResults[0].category_name
+                  : '';
+
+              getVariantNames(productId, (vErr, variantNames) => {
+
+                generateAndSaveEmbedding(
+                  productId,
+                  name,
+                  description,
+                  categoryName,
+                  variantNames || [],
+                  (embErr) => {
+
+                    if (embErr) {
+                      console.error(
+                        'Lỗi cập nhật embedding:',
+                        embErr
+                      );
+                    }
+
+                    res.json({
+                      message: 'Cập nhật sản phẩm thành công'
+                    });
+
+                  }
+                );
+              });
+            }
+          );
         }
       );
-    });
-  });
+    }
+  );
 });
  
 // DELETE - Xóa sản phẩm (CHỈ seller SỞ HỮU sản phẩm đó)
@@ -306,7 +402,7 @@ router.post('/:id/variants', verifyToken, checkRole(['seller']), (req, res) => {
   const productId = req.params.id;
   if (!variant_name) return res.status(400).json({ message: 'Vui lòng nhập tên biến thể' });
 
-  db.query('SELECT seller_id FROM products WHERE id = ?', [productId], (err, results) => {
+  db.query('SELECT seller_id, name, description FROM products WHERE id = ?', [productId], (err, results) => {
     if (err) return res.status(500).json({ message: 'Lỗi server' });
     if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
     if (results[0].seller_id !== req.user.id) return res.status(403).json({ message: 'Không có quyền' });
@@ -314,7 +410,18 @@ router.post('/:id/variants', verifyToken, checkRole(['seller']), (req, res) => {
     db.query('INSERT INTO product_variants (product_id, variant_name, price_extra) VALUES (?, ?, ?)',
       [productId, variant_name, price_extra || 0], (err, result) => {
         if (err) return res.status(500).json({ message: 'Lỗi server' });
-        res.status(201).json({ message: 'Đã thêm biến thể', variantId: result.insertId });
+
+        // Nhúng lại embedding, lần này kèm đầy đủ tên các biến thể (kể cả cái vừa thêm)
+        const productInfo = results[0];
+        db.query(`SELECT c.name AS category_name FROM products p JOIN categories c ON p.category_id = c.id WHERE p.id = ?`,
+          [productId], (catErr, catResults) => {
+            const categoryName = catResults && catResults[0] ? catResults[0].category_name : '';
+            getVariantNames(productId, (vErr, variantNames) => {
+              generateAndSaveEmbedding(productId, productInfo.name, productInfo.description, categoryName, variantNames || [], () => {
+                res.status(201).json({ message: 'Đã thêm biến thể', variantId: result.insertId });
+              });
+            });
+          });
       });
   });
 });
@@ -337,6 +444,25 @@ router.delete('/variants/:variantId', verifyToken, checkRole(['seller']), (req, 
     db.query('DELETE FROM product_variants WHERE id = ?', [req.params.variantId], (err) => {
       if (err) return res.status(500).json({ message: 'Lỗi server' });
       res.json({ message: 'Đã xóa biến thể' });
+    });
+  });
+});
+
+// PUT - Seller tự bật/tắt bán sản phẩm của mình (KHÔNG cần admin, chỉ áp dụng khi đã được duyệt)
+router.put('/:id/toggle-sale', verifyToken, checkRole(['seller']), (req, res) => {
+  db.query('SELECT seller_id, status FROM products WHERE id = ?', [req.params.id], (err, results) => {
+    if (err) return res.status(500).json({ message: 'Lỗi server' });
+    if (results.length === 0) return res.status(404).json({ message: 'Không tìm thấy sản phẩm' });
+    if (results[0].seller_id !== req.user.id) return res.status(403).json({ message: 'Không có quyền' });
+
+    const current = results[0].status;
+    if (current !== 'active' && current !== 'paused') {
+      return res.status(400).json({ message: 'Chỉ có thể bật/tắt bán khi sản phẩm đã được duyệt' });
+    }
+    const newStatus = current === 'active' ? 'paused' : 'active';
+    db.query('UPDATE products SET status = ? WHERE id = ?', [newStatus, req.params.id], (err) => {
+      if (err) return res.status(500).json({ message: 'Lỗi server' });
+      res.json({ message: newStatus === 'paused' ? 'Đã tạm ngưng bán' : 'Đã mở bán lại', status: newStatus });
     });
   });
 });

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
+import { useNavigate } from 'react-router-dom';
 
 function Admin() {
 const [tab, setTab] = useState('users');
@@ -23,6 +24,12 @@ const [newCategory, setNewCategory] = useState({ name: '', description: '', icon
     fetchOrders();
     fetchCategories();
   }, []);
+
+  const navigate = useNavigate();
+const handleMessageSeller = async (sellerId) => {
+  const res = await api.post('/messages/start', { seller_id: sellerId });
+  navigate(`/messages?open=${res.data.conversationId}`);
+};
 
   const handleToggleUser = async (id) => {
     await api.put(`/admin/users/${id}/toggle-status`);
@@ -120,21 +127,30 @@ const handleDeleteCategory = async (id) => {
       )}
 
       {tab === 'products' && (
-        <div>
-          {pendingProducts.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Không có sản phẩm nào chờ duyệt.</p>}
-          {pendingProducts.map((p) => (
-            <div key={p.id} className="card" style={{ marginBottom: 12 }}>
-              <p style={{ fontWeight: 700 }}>{p.name}</p>
-              <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>{p.description}</p>
-              <p style={{ fontWeight: 600, color: 'var(--primary)' }}>{Number(p.price).toLocaleString('vi-VN')}đ — Người bán: {p.seller_name}</p>
-              <div style={{ marginTop: 8 }}>
-                <button onClick={() => handleReviewProduct(p.id, 'active')} style={{ marginRight: 8 }}>✓ Duyệt</button>
-                <button onClick={() => handleReviewProduct(p.id, 'inactive')} className="btn-secondary">✕ Từ chối</button>
-              </div>
-            </div>
-          ))}
+  <div>
+    {pendingProducts.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Không có sản phẩm nào chờ duyệt.</p>}
+    {pendingProducts.map((p) => (
+      <div key={p.id} className="card" style={{ marginBottom: 12, display: 'flex', gap: 14 }}>
+        {p.primary_image ? (
+          <img src={`http://localhost:5000${p.primary_image}`} alt={p.name} style={{ width: 120, height: 120, objectFit: 'cover', borderRadius: 10 }} />
+        ) : (
+          <div style={{ width: 120, height: 120, background: 'var(--surface-hover)', borderRadius: 10 }} />
+        )}
+        <div style={{ flex: 1 }}>
+          <p style={{ fontWeight: 700, fontSize: 16 }}>{p.name}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{p.category_name} — Người bán: {p.seller_name}</p>
+          <p style={{ fontSize: 14, whiteSpace: 'pre-wrap', margin: '6px 0' }}>{p.description}</p>
+          <p style={{ fontWeight: 700, color: 'var(--primary)' }}>{Number(p.price).toLocaleString('vi-VN')}đ — Tồn kho: {p.stock}</p>
+          <div style={{ marginTop: 8 }}>
+            <button onClick={() => handleReviewProduct(p.id, 'active')} style={{ marginRight: 8 }}>✓ Duyệt</button>
+            <button onClick={() => handleReviewProduct(p.id, 'inactive')} className="btn-secondary">✕ Từ chối</button>
+            <button onClick={() => handleMessageSeller(p.seller_id)} className="btn-secondary">Nhắn tin cho shop</button>
+          </div>
         </div>
-      )}
+      </div>
+    ))}
+  </div>
+)}
 
       {tab === 'orders' && (
         <div className="card">

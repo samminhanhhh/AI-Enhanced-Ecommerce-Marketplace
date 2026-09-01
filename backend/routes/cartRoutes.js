@@ -24,12 +24,12 @@ router.get('/', verifyToken, (req, res) => {
     if (err) return res.status(500).json({ message: 'Lỗi server' });
 
     const sql = `SELECT ci.id AS cart_item_id, ci.quantity, ci.product_id, ci.variant_id,
-                p.name, p.price, p.stock, pv.variant_name, pv.price_extra,
-                (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image
-                FROM cart_items ci
-                JOIN products p ON ci.product_id = p.id
-                LEFT JOIN product_variants pv ON ci.variant_id = pv.id
-                WHERE ci.cart_id = ?`;
+            p.name, (p.price + IFNULL(pv.price_extra, 0)) AS price, p.stock, pv.variant_name,
+            (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image
+            FROM cart_items ci
+            JOIN products p ON ci.product_id = p.id
+            LEFT JOIN product_variants pv ON ci.variant_id = pv.id
+            WHERE ci.cart_id = ?`;
     db.query(sql, [cartId], (err, items) => {
       if (err) return res.status(500).json({ message: 'Lỗi server' });
       res.json({ cartId, items });

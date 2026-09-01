@@ -41,10 +41,12 @@ function Checkout() {
 
     setSubmitting(true);
     try {
-      const res = await api.post('/orders', {
-        payment_method: paymentMethod,
-        shipping_address: address
-      });
+      const selectedIds = JSON.parse(localStorage.getItem('selected_cart_items') || '[]');
+const res = await api.post('/orders', {
+  payment_method: paymentMethod,
+  shipping_address: address,
+  selected_item_ids: selectedIds
+});
       alert(`Đặt hàng thành công! Mã đơn hàng: #${res.data.orderId}`);
       navigate('/orders');
     } catch (err) {

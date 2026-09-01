@@ -6,12 +6,14 @@ function Cart() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const fetchCart = async () => {
     setLoading(true);
     try {
       const res = await api.get('/cart');
       setItems(res.data.items);
+      setSelectedIds(res.data.items.map((i) => i.cart_item_id));
     } catch (err) {
       console.error(err);
     }
@@ -26,7 +28,7 @@ function Cart() {
     if (newQty < 1) return;
     try {
       await api.put(`/cart/items/${cartItemId}`, { quantity: newQty });
-      fetchCart(); // tải lại giỏ hàng để cập nhật giao diện
+      fetchCart();
     } catch (err) {
       alert(err.response?.data?.message || 'Có lỗi xảy ra');
     }
@@ -41,8 +43,19 @@ function Cart() {
     }
   };
 
-  // Tính tổng tiền từ danh sách items hiện có
-  const totalAmount = items.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+
+  const handleCheckout = () => {
+    localStorage.setItem('selected_cart_items', JSON.stringify(selectedIds));
+    navigate('/checkout');
+  };
+
+  // Chỉ tính tổng tiền của các sản phẩm ĐÃ TICK
+  const totalAmount = items
+    .filter((item) => selectedIds.includes(item.cart_item_id))
+    .reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
 
   if (loading) return <p style={{ textAlign: 'center', marginTop: 40 }}>Đang tải...</p>;
 
@@ -54,6 +67,12 @@ function Cart() {
 
       {items.map((item) => (
         <div key={item.cart_item_id} style={{ display: 'flex', gap: 12, alignItems: 'center', borderBottom: '1px solid #444', padding: '12px 0' }}>
+          <input
+            type="checkbox"
+            checked={selectedIds.includes(item.cart_item_id)}
+            onChange={() => toggleSelect(item.cart_item_id)}
+          />
+
           {item.image ? (
             <img src={`http://localhost:5000${item.image}`} alt={item.name} style={{ width: 70, height: 70, objectFit: 'cover', borderRadius: 4 }} />
           ) : (
@@ -62,8 +81,8 @@ function Cart() {
 
           <div style={{ flex: 1 }}>
             <p style={{ fontWeight: 'bold' }}>
-  {item.name} {item.variant_name && <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--text-muted)' }}>({item.variant_name})</span>}
-</p>
+              {item.name} {item.variant_name && <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--text-muted)' }}>({item.variant_name})</span>}
+            </p>
             <p>{Number(item.price).toLocaleString('vi-VN')}đ</p>
           </div>
 
@@ -82,8 +101,12 @@ function Cart() {
           <p style={{ fontSize: 18, fontWeight: 'bold' }}>
             Tổng cộng: {totalAmount.toLocaleString('vi-VN')}đ
           </p>
-          <button onClick={() => navigate('/checkout')} style={{ padding: '10px 20px', fontSize: 16 }}>
-            Tiến hành đặt hàng
+          <button
+            disabled={selectedIds.length === 0}
+            onClick={handleCheckout}
+            style={{ padding: '10px 20px', fontSize: 16 }}
+          >
+            Tiến hành đặt hàng ({selectedIds.length} sản phẩm)
           </button>
         </div>
       )}
