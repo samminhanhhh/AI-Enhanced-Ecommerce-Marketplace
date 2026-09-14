@@ -3,18 +3,15 @@ const router = express.Router();
 const db = require('../db');
 const { verifyToken, checkRole } = require('../middleware/authMiddleware');
 
-// POST - Buyer bắt đầu (hoặc lấy lại) cuộc trò chuyện với 1 seller
-router.post('/start', verifyToken, checkRole(['buyer']), (req, res) => {
+// POST - Buyer hoặc Admin bắt đầu (hoặc lấy lại) cuộc trò chuyện với 1 seller
+router.post('/start', verifyToken, checkRole(['buyer', 'admin']), (req, res) => {
   const { seller_id } = req.body;
   const buyerId = req.user.id;
-
   if (!seller_id) return res.status(400).json({ message: 'Thiếu thông tin cửa hàng' });
 
   db.query('SELECT id FROM conversations WHERE buyer_id = ? AND seller_id = ?', [buyerId, seller_id], (err, existing) => {
     if (err) return res.status(500).json({ message: 'Lỗi server' });
-    if (existing.length > 0) {
-      return res.json({ conversationId: existing[0].id });
-    }
+    if (existing.length > 0) return res.json({ conversationId: existing[0].id });
     db.query('INSERT INTO conversations (buyer_id, seller_id) VALUES (?, ?)', [buyerId, seller_id], (err, result) => {
       if (err) return res.status(500).json({ message: 'Lỗi server' });
       res.json({ conversationId: result.insertId });

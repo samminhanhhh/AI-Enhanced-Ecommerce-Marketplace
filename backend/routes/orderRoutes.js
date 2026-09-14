@@ -38,16 +38,25 @@ function getSellerIdsForOrder(orderId, callback) {
   );
 }
 
-// POST - Đặt hàng (checkout) - dùng TRANSACTION
+// POST - Đặt hàng (checkout) - dùng TRANSACTION + khóa FOR UPDATE để chống race condition
+// khi nhiều người mua cùng đặt một sản phẩm gần như đồng thời (xem giải trình ở cuối file).
+const MAX_ORDER_RETRIES = 3; // số lần tự thử lại tối đa nếu 2 giao dịch giẫm chân nhau gây deadlock
+
 router.post('/', verifyToken, (req, res) => {
   const { payment_method, shipping_address, selected_item_ids } = req.body;
-if (!payment_method || !shipping_address || !selected_item_ids || selected_item_ids.length === 0) {
-  return res.status(400).json({ message: 'Vui lòng chọn sản phẩm và điền đủ thông tin' });
-}
-  const userId = req.user.id;
-  if (!payment_method || !shipping_address) {
-    return res.status(400).json({ message: 'Vui lòng chọn phương thức thanh toán và địa chỉ giao hàng' });
+  if (!payment_method || !shipping_address || !selected_item_ids || selected_item_ids.length === 0) {
+    return res.status(400).json({ message: 'Vui lòng chọn sản phẩm và điền đủ thông tin' });
   }
+
+  attemptPlaceOrder(
+    { userId: req.user.id, payment_method, shipping_address, selected_item_ids },
+    res,
+    MAX_ORDER_RETRIES
+  );
+});
+
+function attemptPlaceOrder(orderInput, res, retriesLeft) {
+  const { userId, payment_method, shipping_address, selected_item_ids } = orderInput;
 
   // Lấy connection riêng để dùng transaction (không dùng chung pool query thông thường)
   db.getConnection((err, connection) => {
@@ -59,26 +68,40 @@ if (!payment_method || !shipping_address || !selected_item_ids || selected_item_
         return res.status(500).json({ message: 'Lỗi server' });
       }
 
-      // Bước 1: Lấy giỏ hàng + các sản phẩm trong giỏ
+      // Bước 1: Lấy giỏ hàng + KHÓA các dòng sản phẩm liên quan (FOR UPDATE)
+      //
+      // FOR UPDATE khiến MySQL khóa các dòng "products" được SELECT cho đến khi transaction này
+      // commit/rollback. Nếu người mua thứ 2 cũng đặt sản phẩm này gần như cùng lúc, request của
+      // họ sẽ phải CHỜ transaction thứ nhất kết thúc rồi mới được đọc/khóa dòng, và sẽ thấy đúng
+      // tồn kho MỚI NHẤT (không phải tồn kho cũ trước khi người thứ nhất trừ) — nhờ đó tránh được
+      // tình trạng cả 2 giao dịch cùng đọc "còn hàng" rồi cùng trừ kho, dẫn đến bán vượt tồn kho.
+      //
+      // ORDER BY p.id ASC: đảm bảo mọi giao dịch luôn khóa các sản phẩm theo đúng 1 thứ tự cố định
+      // (id tăng dần), giảm khả năng 2 giao dịch khóa chéo nhau gây deadlock khi đơn hàng có nhiều
+      // sản phẩm trùng nhau.
       const getCartSql = `SELECT ci.id AS cart_item_id, ci.product_id, ci.variant_id, ci.quantity, p.stock, p.name,
               (p.price + IFNULL(pv.price_extra, 0)) AS price
               FROM cart_items ci
               JOIN carts c ON ci.cart_id = c.id
               JOIN products p ON ci.product_id = p.id
               LEFT JOIN product_variants pv ON ci.variant_id = pv.id
-              WHERE c.user_id = ? AND ci.id IN (?)`;
-connection.query(getCartSql, [userId, selected_item_ids], (err, cartItems) => {
-        if (err) return rollbackAndError(connection, res, err);
+              WHERE c.user_id = ? AND ci.id IN (?)
+              ORDER BY p.id ASC
+              FOR UPDATE`;
+      connection.query(getCartSql, [userId, selected_item_ids], (err, cartItems) => {
+        if (err) return handleOrderError(err, connection, res, orderInput, retriesLeft);
 
         if (cartItems.length === 0) {
-          connection.release();
+          connection.rollback(() => connection.release());
           return res.status(400).json({ message: 'Giỏ hàng trống, không thể đặt hàng' });
         }
 
-        // Bước 2: Kiểm tra tồn kho đủ không
+        // Bước 2: Kiểm tra tồn kho đủ không.
+        // Vì bước 1 đã dùng FOR UPDATE, giá trị item.stock ở đây chắc chắn là tồn kho mới nhất
+        // tại thời điểm khóa được cấp — không còn là dữ liệu "cũ" có thể bị người khác vừa đổi.
         for (const item of cartItems) {
           if (item.quantity > item.stock) {
-            connection.release();
+            connection.rollback(() => connection.release());
             return res.status(400).json({ message: `Sản phẩm "${item.name}" không đủ hàng tồn kho` });
           }
         }
@@ -90,7 +113,7 @@ connection.query(getCartSql, [userId, selected_item_ids], (err, cartItems) => {
         const createOrderSql = `INSERT INTO orders (user_id, total_amount, payment_method, shipping_address)
                                 VALUES (?, ?, ?, ?)`;
         connection.query(createOrderSql, [userId, totalAmount, payment_method, shipping_address], (err, orderResult) => {
-          if (err) return rollbackAndError(connection, res, err);
+          if (err) return handleOrderError(err, connection, res, orderInput, retriesLeft);
 
           const orderId = orderResult.insertId;
 
@@ -101,22 +124,28 @@ connection.query(getCartSql, [userId, selected_item_ids], (err, cartItems) => {
           cartItems.forEach((item) => {
             const insertItemSql = `INSERT INTO order_items (order_id, product_id, variant_id, quantity, price_at_purchase)
                        VALUES (?, ?, ?, ?, ?)`;
-connection.query(insertItemSql, [orderId, item.product_id, item.variant_id || null, item.quantity, item.price], (err) => {
-              if (err && !hasError) { hasError = true; return rollbackAndError(connection, res, err); }
+            connection.query(insertItemSql, [orderId, item.product_id, item.variant_id || null, item.quantity, item.price], (err) => {
+              if (err) {
+                if (!hasError) { hasError = true; handleOrderError(err, connection, res, orderInput, retriesLeft); }
+                return;
+              }
 
               const updateStockSql = 'UPDATE products SET stock = stock - ? WHERE id = ?';
               connection.query(updateStockSql, [item.quantity, item.product_id], (err) => {
-                if (err && !hasError) { hasError = true; return rollbackAndError(connection, res, err); }
+                if (err) {
+                  if (!hasError) { hasError = true; handleOrderError(err, connection, res, orderInput, retriesLeft); }
+                  return;
+                }
 
                 completed++;
                 // Khi đã xử lý xong HẾT các sản phẩm trong giỏ
                 if (completed === cartItems.length && !hasError) {
                   // Bước 6: Xóa giỏ hàng sau khi đặt thành công
                   const clearCartSql = `DELETE FROM cart_items WHERE id IN (?)`;
-connection.query(clearCartSql, [selected_item_ids], (err) => {
-                    if (err) return rollbackAndError(connection, res, err);
+                  connection.query(clearCartSql, [selected_item_ids], (err) => {
+                    if (err) return handleOrderError(err, connection, res, orderInput, retriesLeft);
 
-                    // Bước 7: TẤT CẢ THÀNH CÔNG -> lưu thật vào database
+                    // Bước 7: TẤT CẢ THÀNH CÔNG -> lưu thật vào database, giải phóng khóa FOR UPDATE
                     connection.commit((err) => {
                       connection.release();
                       if (err) return res.status(500).json({ message: 'Lỗi server' });
@@ -131,13 +160,23 @@ connection.query(clearCartSql, [selected_item_ids], (err) => {
       });
     });
   });
-});
+}
 
-// Hàm phụ trợ: hủy transaction và trả lỗi
-function rollbackAndError(connection, res, err) {
+// Hàm phụ trợ: hủy transaction (giải phóng mọi khóa FOR UPDATE đang giữ), giải phóng connection,
+// và TỰ ĐỘNG THỬ LẠI toàn bộ giao dịch nếu nguyên nhân lỗi là deadlock (2 giao dịch khóa chéo nhau) —
+// vì trong trường hợp đó dữ liệu không hề sai, chỉ là MySQL buộc phải hủy 1 trong 2 giao dịch để
+// tránh treo vĩnh viễn, nên thử lại là hợp lý thay vì báo lỗi ngay cho người dùng.
+function handleOrderError(err, connection, res, orderInput, retriesLeft) {
   connection.rollback(() => {
     connection.release();
     console.error(err);
+
+    const isDeadlock = err && (err.code === 'ER_LOCK_DEADLOCK' || err.errno === 1213);
+    if (isDeadlock && retriesLeft > 0) {
+      console.warn(`Deadlock khi đặt hàng, tự động thử lại (còn ${retriesLeft} lần)...`);
+      return attemptPlaceOrder(orderInput, res, retriesLeft - 1);
+    }
+
     res.status(500).json({ message: 'Lỗi khi đặt hàng, đã hủy giao dịch' });
   });
 }
@@ -328,8 +367,8 @@ router.put('/:id/review-return', verifyToken, checkRole(['seller', 'admin']), (r
       if (err) return res.status(500).json({ message: 'Lỗi server' });
 
       const messageContent = approved
-        ? `✅ Yêu cầu trả hàng cho đơn #${orderId} đã được chấp nhận. Tiền sẽ được hoàn lại (mô phỏng).`
-        : `❌ Yêu cầu trả hàng cho đơn #${orderId} đã bị từ chối.`;
+        ? `Yêu cầu trả hàng cho đơn #${orderId} đã được chấp nhận. Tiền sẽ được hoàn lại (mô phỏng).`
+        : `Yêu cầu trả hàng cho đơn #${orderId} đã bị từ chối.`;
       sendSystemMessage(buyerId, sellerId, sellerId, messageContent);
 
       res.json({ message: approved ? 'Đã chấp nhận trả hàng và hoàn tiền (mô phỏng)' : 'Đã từ chối yêu cầu trả hàng' });

@@ -10,7 +10,7 @@ function MyProducts() {
   const [editForm, setEditForm] = useState({});
   const [expandedId, setExpandedId] = useState(null);
   const [variants, setVariants] = useState([]);
-  const [newVariant, setNewVariant] = useState({ variant_name: '', price_extra: 0 });
+  const [newVariant, setNewVariant] = useState({ variant_name: '', price_extra: 0, stock: 0 });
   const navigate = useNavigate();
   const [uploadingImageFor, setUploadingImageFor] = useState(null);
   const fileInputRef = useRef(null);

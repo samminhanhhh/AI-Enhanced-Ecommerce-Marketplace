@@ -18,9 +18,12 @@ function Checkout() {
     });
     // Lấy tổng tiền giỏ hàng để hiện trên mã QR (mô phỏng số tiền cần chuyển)
     api.get('/cart').then((res) => {
-      const total = res.data.items.reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
-      setCartTotal(total);
-    });
+  const selectedIds = JSON.parse(localStorage.getItem('selected_cart_items') || '[]');
+  const total = res.data.items
+    .filter((item) => selectedIds.includes(item.cart_item_id))
+    .reduce((sum, item) => sum + Number(item.price) * item.quantity, 0);
+  setCartTotal(total);
+});
   }, []);
 
   // Mỗi khi đổi phương thức thanh toán, ẩn QR cũ đi (nếu có), người dùng cần bấm lại nút xác nhận

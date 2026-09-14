@@ -24,7 +24,8 @@ router.get('/', verifyToken, (req, res) => {
     if (err) return res.status(500).json({ message: 'Lỗi server' });
 
     const sql = `SELECT ci.id AS cart_item_id, ci.quantity, ci.product_id, ci.variant_id,
-            p.name, (p.price + IFNULL(pv.price_extra, 0)) AS price, p.stock, pv.variant_name,
+            p.name, (p.price + IFNULL(pv.price_extra, 0)) AS price,
+            IFNULL(pv.stock, p.stock) AS stock, pv.variant_name,
             (SELECT image_url FROM product_images WHERE product_id = p.id AND is_primary = 1 LIMIT 1) AS image
             FROM cart_items ci
             JOIN products p ON ci.product_id = p.id
